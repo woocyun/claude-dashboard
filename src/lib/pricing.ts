@@ -1,10 +1,21 @@
-'use strict';
+export interface Price {
+  input: number;
+  output: number;
+}
+
+export interface Usage {
+  input: number;
+  output: number;
+  cacheWrite5m: number;
+  cacheWrite1h: number;
+  cacheRead: number;
+}
 
 // Per-1M-token list prices (USD). Source: claude-api skill model table.
 // input/output are the base rates. Cache write/read are derived from input:
 //   5-minute cache write = 1.25x input, 1-hour cache write = 2x input,
 //   cache read = 0.1x input.
-const PRICES = {
+export const PRICES: Record<string, Price> = {
   'claude-fable-5':    { input: 10, output: 50 },
   'claude-opus-4-8':   { input: 5,  output: 25 },
   'claude-opus-4-7':   { input: 5,  output: 25 },
@@ -20,9 +31,9 @@ const PRICES = {
   'claude-3-5-sonnet': { input: 3,  output: 15 },
 };
 
-// Match a model id to a price entry. Falls back on a prefix match so dated
-// snapshots (claude-opus-4-8-20260101) and minor variants still resolve.
-function priceFor(model) {
+// Falls back on prefix match so dated snapshots (claude-opus-4-8-20260101)
+// and minor variants still resolve.
+export function priceFor(model: string | null | undefined): Price | null {
   if (!model) return null;
   if (PRICES[model]) return PRICES[model];
   for (const key of Object.keys(PRICES)) {
@@ -33,7 +44,7 @@ function priceFor(model) {
 
 // Cost in USD for one usage record. Synthetic/throttle models (e.g. <synthetic>)
 // and unknown models price at 0 and are reported separately by the parser.
-function costOf(model, u) {
+export function costOf(model: string, u: Usage): number {
   const p = priceFor(model);
   if (!p) return 0;
   const inRate = p.input / 1e6;
@@ -46,5 +57,3 @@ function costOf(model, u) {
     (u.cacheRead || 0) * inRate * 0.1
   );
 }
-
-module.exports = { PRICES, priceFor, costOf };

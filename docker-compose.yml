@@ -1,0 +1,15 @@
+services:
+  dashboard:
+    build: .
+    ports:
+      - "${PORT:-4317}:4317"
+    volumes:
+      # Mount host Claude transcripts as read-only into the container.
+      - "${HOME}/.claude/projects:/data/claude-projects:ro"
+    environment:
+      PORT: "4317"
+      # Must be 0.0.0.0 inside the container — Docker handles external binding.
+      HOST: "0.0.0.0"
+      PROJECTS_DIR: "/data/claude-projects"
+      ANTHROPIC_ADMIN_KEY: "${ANTHROPIC_ADMIN_KEY:-}"
+    restart: unless-stopped

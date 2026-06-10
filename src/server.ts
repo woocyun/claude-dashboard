@@ -1,19 +1,18 @@
-'use strict';
+import * as http from 'http';
+import * as fs from 'fs';
+import * as path from 'path';
+import { loadEntries } from './lib/parse';
+import { summarize } from './lib/aggregate';
+import * as admin from './lib/admin';
+import type { AdminData } from './lib/admin';
 
-const http = require('http');
-const fs = require('fs');
-const path = require('path');
-const { loadEntries } = require('./lib/parse');
-const { summarize } = require('./lib/aggregate');
-const admin = require('./lib/admin');
-
-const PORT = process.env.PORT || 4317;
+const PORT = parseInt(process.env.PORT || '4317', 10);
 // Localhost-only by default: the dashboard has no auth and serves usage data.
 const HOST = process.env.HOST || '127.0.0.1';
 const ADMIN_KEY = process.env.ANTHROPIC_ADMIN_KEY || '';
-const PUBLIC = path.join(__dirname, 'public');
+const PUBLIC = path.join(__dirname, '..', 'public');
 
-const MIME = {
+const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -22,9 +21,9 @@ const MIME = {
 
 // Cache the Admin API response briefly — the docs recommend polling it at most
 // once per minute, and data is only fresh to ~5 min anyway.
-let adminCache = { at: 0, data: null };
+let adminCache: { at: number; data: AdminData | null } = { at: 0, data: null };
 
-function sendJSON(res, code, obj) {
+function sendJSON(res: http.ServerResponse, code: number, obj: unknown): void {
   const body = JSON.stringify(obj);
   res.writeHead(code, {
     'content-type': 'application/json; charset=utf-8',
@@ -33,7 +32,7 @@ function sendJSON(res, code, obj) {
   res.end(body);
 }
 
-function serveStatic(res, urlPath) {
+function serveStatic(res: http.ServerResponse, urlPath: string): void {
   const rel = urlPath === '/' ? 'index.html' : urlPath.replace(/^\/+/, '');
   const file = path.join(PUBLIC, rel);
   if (!file.startsWith(PUBLIC)) {
@@ -45,20 +44,22 @@ function serveStatic(res, urlPath) {
       res.writeHead(404).end('not found');
       return;
     }
-    res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream' });
+    res.writeHead(200, {
+      'content-type': MIME[path.extname(file)] || 'application/octet-stream',
+    });
     res.end(data);
   });
 }
 
 const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, `http://localhost:${PORT}`);
+  const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
 
   if (url.pathname === '/api/usage') {
     try {
       const entries = loadEntries();
       sendJSON(res, 200, summarize(entries));
     } catch (e) {
-      sendJSON(res, 500, { error: e.message });
+      sendJSON(res, 500, { error: (e as Error).message });
     }
     return;
   }

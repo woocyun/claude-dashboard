@@ -4,9 +4,15 @@
   "private": true,
   "description": "Realtime dashboard for Claude Code subscription usage (local transcripts) and Anthropic Admin API usage/cost.",
   "type": "commonjs",
-  "bin": { "claude-dashboard": "server.js" },
+  "bin": { "claude-dashboard": "dist/server.js" },
   "scripts": {
-    "start": "node server.js"
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "tsc && node dist/server.js"
   },
-  "engines": { "node": ">=18" }
+  "engines": { "node": ">=18" },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
 }
