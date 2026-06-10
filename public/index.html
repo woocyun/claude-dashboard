@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Claude Usage Dashboard</title>
+<link rel="stylesheet" href="/style.css" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>📊</text></svg>" />
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span class="dot" id="liveDot"></span>
+    <h1>Claude Usage</h1>
+  </div>
+  <div class="meta">
+    <span id="updated">—</span>
+    <label class="auto"><input type="checkbox" id="autoToggle" checked /> live</label>
+  </div>
+</header>
+
+<main>
+  <!-- KPI row -->
+  <section class="kpis" id="kpis"></section>
+
+  <!-- 5-hour window -->
+  <section class="card window-card">
+    <div class="card-head">
+      <h2>Current 5-hour window</h2>
+      <span class="sub" id="windowReset">—</span>
+    </div>
+    <div class="window-body" id="windowBody">
+      <p class="empty">No recent activity.</p>
+    </div>
+    <p class="note">
+      Subscription limits aren't exposed by any API — this estimates how hard you're
+      using the current 5-hour reset window via burn rate, the same way ccusage does.
+    </p>
+  </section>
+
+  <!-- Trend -->
+  <section class="card">
+    <div class="card-head"><h2>Last 48 hours</h2><span class="sub" id="trendSub">tokens / hour</span></div>
+    <div class="chart-wrap"><canvas id="trendChart" height="120"></canvas></div>
+  </section>
+
+  <!-- Breakdowns -->
+  <div class="grid">
+    <section class="card">
+      <div class="card-head"><h2>By model</h2></div>
+      <div id="byModel"></div>
+    </section>
+    <section class="card">
+      <div class="card-head"><h2>By project</h2></div>
+      <div id="byProject"></div>
+    </section>
+  </div>
+
+  <section class="card">
+    <div class="card-head"><h2>By day</h2></div>
+    <div id="byDay"></div>
+  </section>
+
+  <!-- Admin API -->
+  <section class="card admin-card">
+    <div class="card-head"><h2>Anthropic API (Admin)</h2><span class="sub" id="adminSub">—</span></div>
+    <div id="adminBody"><p class="empty">Loading…</p></div>
+  </section>
+
+  <footer>
+    Local data parsed from <code>~/.claude/projects</code>. Costs are computed from
+    list prices and are an estimate, not a bill.
+  </footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
