@@ -23,6 +23,20 @@
   <!-- KPI row -->
   <section class="kpis" id="kpis"></section>
 
+  <!-- Live subscription limits (claude.ai) -->
+  <section class="card limits-card">
+    <div class="card-head">
+      <h2>Subscription limits</h2>
+      <span class="sub" id="limitsSub">—</span>
+    </div>
+    <div id="limitsBody"><p class="empty">Loading…</p></div>
+    <p class="note">
+      Live from your signed-in claude.ai session (undocumented endpoint). Sign in
+      once in the popup window; it stays signed in and refreshes automatically —
+      see <code>SUBSCRIPTION-USAGE-NOTES.md</code>.
+    </p>
+  </section>
+
   <!-- 5-hour window -->
   <section class="card window-card">
     <div class="card-head">
@@ -33,8 +47,9 @@
       <p class="empty">No recent activity.</p>
     </div>
     <p class="note">
-      Subscription limits aren't exposed by any API — this estimates how hard you're
-      using the current 5-hour reset window via burn rate, the same way ccusage does.
+      A transcript-based burn-rate estimate for the current 5-hour reset window (the
+      ccusage approach). For the actual session/weekly percentages, see
+      <strong>Subscription limits</strong> above.
     </p>
   </section>
 
@@ -61,15 +76,10 @@
     <div id="byDay"></div>
   </section>
 
-  <!-- Admin API -->
-  <section class="card admin-card">
-    <div class="card-head"><h2>Anthropic API (Admin)</h2><span class="sub" id="adminSub">—</span></div>
-    <div id="adminBody"><p class="empty">Loading…</p></div>
-  </section>
-
   <footer>
-    Local data parsed from <code>~/.claude/projects</code>. Costs are computed from
-    list prices and are an estimate, not a bill.
+    Token &amp; cost figures are parsed locally from <code>~/.claude/projects</code>
+    against list prices — an estimate, not a bill. The <strong>Subscription
+    limits</strong> card comes from your signed-in claude.ai session.
   </footer>
 </main>
 
