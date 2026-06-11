@@ -1,5 +1,7 @@
 # Claude Usage Dashboard
 
+![Claude Usage Dashboard](docs/dashboard.png)
+
 A local **desktop app** (Electron) for keeping an eye on your Claude usage. It
 pulls from two sources, both on your own machine:
 
