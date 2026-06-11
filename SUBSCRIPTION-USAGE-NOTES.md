@@ -43,6 +43,34 @@ Field mapping (see `src/lib/limits.ts`):
 | **Extra usage $ used**| `extra_usage.used_credits` ÷ 100   | cents → `373` = `$3.73`                  |
 | **Extra usage $ cap** | `extra_usage.monthly_limit` ÷ 100  | cents → `10000` = `$100.00`; gated by `is_enabled` |
 
+## Prepaid credit balance
+
+The **Credit balance** card reads a second undocumented endpoint, fetched through
+the same embedded-window transport in the same 60s poll:
+
+```
+GET https://claude.ai/api/organizations/{org}/prepaid/credits
+```
+
+Verified response shape:
+
+```json
+{
+  "amount": 8561,
+  "currency": "USD",
+  "auto_reload_settings": null,
+  "pending_invoice_amount_cents": null,
+  "last_paid_purchase_cents": null
+}
+```
+
+| UI element         | Field      | Notes                                     |
+| ------------------ | ---------- | ----------------------------------------- |
+| **Credit balance** | `amount` ÷ 100 | cents → `8561` = `$85.61` (sibling `pending_invoice_amount_cents` confirms the unit) |
+
+Parsed by `parseCredit()` in `src/lib/limits.ts`; the card fails soft (omitted)
+if the endpoint is unavailable, so the rest of the limits card still renders.
+
 ## Why an embedded browser window
 
 claude.ai sits behind **Cloudflare**. A request to the usage endpoint must come

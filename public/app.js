@@ -207,6 +207,12 @@ function extraBlock(x) {
     <div class="limit-sub">${x.enabled ? 'monthly · ' + (x.currency || 'USD') : 'disabled'}</div>
   </div>`;
 }
+function creditBlock(c) {
+  return `<div class="limit">
+    <div class="limit-head"><span class="label">Credit balance</span><span class="pct">${fmtUSD(c.balanceUsd)}</span></div>
+    <div class="limit-sub">prepaid · ${c.currency || 'USD'}</div>
+  </div>`;
+}
 function renderLimits(l) {
   const body = document.getElementById('limitsBody');
   const sub = document.getElementById('limitsSub');
@@ -226,6 +232,7 @@ function renderLimits(l) {
   if (l.session) blocks.push(gaugeBlock('Current session', l.session.pct, resetLabel(l.session.resetsAt)));
   if (l.weekly) blocks.push(gaugeBlock('Weekly', l.weekly.pct, resetLabel(l.weekly.resetsAt)));
   if (l.extraUsage) blocks.push(extraBlock(l.extraUsage));
+  if (l.creditBalance) blocks.push(creditBlock(l.creditBalance));
   body.innerHTML = `<div class="limits-grid">${blocks.join('')}</div>`;
 }
 
