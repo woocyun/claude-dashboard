@@ -114,9 +114,9 @@ export async function refresh(): Promise<Limits> {
       extraUsage: x
         ? {
             enabled: !!x.is_enabled,
-            // Observed units: used_credits is dollars (float), monthly_limit is
-            // cents (int → /100). See SUBSCRIPTION-USAGE-NOTES.md.
-            usedUsd: Number(x.used_credits) || 0,
+            // Observed units: both used_credits and monthly_limit are cents
+            // (int → /100). See SUBSCRIPTION-USAGE-NOTES.md.
+            usedUsd: (Number(x.used_credits) || 0) / 100,
             capUsd: (Number(x.monthly_limit) || 0) / 100,
             currency: x.currency || 'USD',
           }

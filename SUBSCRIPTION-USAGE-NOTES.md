@@ -40,7 +40,7 @@ Field mapping (see `src/lib/limits.ts`):
 | **Current session %** | `five_hour.utilization`            | float 0–100; resets at `five_hour.resets_at` |
 | **Weekly %**          | `seven_day.utilization`            | resets at `seven_day.resets_at`         |
 | (model-specific)      | `seven_day_opus` / `seven_day_sonnet` | `null` on most plans; same shape when present |
-| **Extra usage $ used**| `extra_usage.used_credits`         | dollars (float)                         |
+| **Extra usage $ used**| `extra_usage.used_credits` ÷ 100   | cents → `373` = `$3.73`                  |
 | **Extra usage $ cap** | `extra_usage.monthly_limit` ÷ 100  | cents → `10000` = `$100.00`; gated by `is_enabled` |
 
 ## Why an embedded browser window
