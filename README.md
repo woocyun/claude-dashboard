@@ -1,131 +1,138 @@
 # Claude Usage Dashboard
 
-A local, near-realtime dashboard for your Claude usage. It reads two sources:
+A local **desktop app** (Electron) for keeping an eye on your Claude usage. It
+pulls from two sources, both on your own machine:
 
-1. **Claude Code subscription usage** — parsed directly from the transcripts in
+1. **Claude Code usage** — parsed directly from the transcripts in
    `~/.claude/projects/**/*.jsonl`. Per-message token counts (input, output,
    cache write/read) are aggregated into cost estimates, broken down by model,
    project, and day, and grouped into the **5-hour reset windows** Claude uses,
    with a live burn-rate estimate. No API key, works offline.
 
-2. **Anthropic API (Admin) usage & cost** — optional. If you set an
-   `sk-ant-admin…` key, the dashboard pulls org-level usage and cost from the
-   [Usage & Cost Admin API](https://platform.claude.com/docs/en/api/usage-cost-api).
-   This is **organization-only** — individual Pro/Max accounts can't use it.
+2. **Live subscription limits** — the real **Current session %**, **Weekly %**,
+   and **Extra usage $** that claude.ai shows for Pro/Max plans. There's no
+   official API for these, so the app reads them from your **signed-in claude.ai
+   session inside an embedded window** (see
+   [How the live limits work](#how-the-live-limits-work)). Sign in once; it
+   stays signed in.
 
-The page auto-refreshes every 5 seconds (local data) / 60 seconds (Admin API).
+The dashboard auto-refreshes every few seconds (local data) and polls the live
+limits about once a minute.
 
 ## Requirements
 
-- **Node.js ≥ 18** (uses only the standard library — nothing to `npm install`).
-- macOS or Linux. On Windows, run it inside WSL2 so the `~/.claude` path
-  resolves correctly.
-- An existing Claude Code install that has produced transcripts under
-  `~/.claude/projects/`. If that folder is empty, the local panel will simply
-  show no data.
+- **Node.js ≥ 20.12** to build and run from source.
+- **macOS** (built and tested here; the app packages to a `.dmg`). The live
+  subscription-limits feature relies on a real Chromium window clearing
+  Cloudflare, which Electron provides on any platform, but only macOS packaging
+  is wired up in `package.json`.
+- An existing Claude Code install with transcripts under `~/.claude/projects/`.
+  If that folder is empty, the Claude Code panel simply shows no data.
 
-## Configuration
-
-**You don't need to configure anything to get started.** The local Claude Code
-usage panel works offline with zero setup. The settings below are all optional.
-
-| Variable              | Required? | Purpose                                                         |
-| --------------------- | --------- | --------------------------------------------------------------- |
-| `PORT`                | No        | Port to listen on. Default `4317`.                              |
-| `HOST`                | No        | Interface to bind. Default `127.0.0.1` (localhost only). See [Privacy & security](#privacy--security) before changing. |
-| `ANTHROPIC_ADMIN_KEY` | No        | Org Admin API key (`sk-ant-admin…`) to enable the Admin panel.  |
-
-To keep your settings in a file, copy the provided template and fill it in:
-
-```bash
-cp .env.example .env
-# then edit .env and add your values
-```
-
-> ⚠️ **Never commit your real `.env`.** It's already listed in `.gitignore`, and
-> `ANTHROPIC_ADMIN_KEY` should be treated like a password. Only `.env.example`
-> (which contains no secrets) belongs in the repo.
-
-### Getting an Admin API key (optional)
-
-The Admin panel is **organization-only**. If you're on an individual Pro/Max
-plan you can skip this entirely — the panel just stays disabled.
-
-1. Sign in to the [Anthropic Console](https://console.anthropic.com/) as a
-   member of an **organization**.
-2. Go to **Settings → API keys** and create an **Admin** key (it starts with
-   `sk-ant-admin…`).
-3. Put it in your `.env` as `ANTHROPIC_ADMIN_KEY=…`, or pass it inline (below).
-
-## Run
-
-No dependencies to install — it uses only the Node standard library.
+## Run from source
 
 ```bash
 cd claude-dashboard
-node server.js
-# → http://localhost:4317
+npm install        # installs Electron + build tooling (no runtime deps)
+npm start          # compiles, then launches the desktop app
 ```
 
-To pass configuration inline (note: plain `node server.js` does **not**
-auto-load `.env` — that convenience comes with the upcoming Docker Compose
-setup; for now, export the vars or pass them on the command line):
+On launch a **Sign in to Claude** window opens. Log into claude.ai there once
+(and solve the Cloudflare check if it appears). The window then hides itself and
+the dashboard populates — the live-limits card shows a "waiting for sign-in"
+spinner until you're in.
+
+## Build a distributable app
 
 ```bash
-ANTHROPIC_ADMIN_KEY=sk-ant-admin-... PORT=8080 node server.js
+npm run dist:mac   # → release/Claude Usage Dashboard-<version>-<arch>.dmg
+# or, faster, an unpacked .app without the DMG step:
+npm run pack       # → release/mac-<arch>/Claude Usage Dashboard.app
 ```
 
-Or load your `.env` into the shell first:
+> The build targets **your machine's architecture only** — on Apple Silicon it
+> produces an `arm64` DMG that won't run on Intel Macs. For a universal (or Intel)
+> build, add an `arch` to the `mac` block in `package.json`, e.g.
+> `"mac": { "target": "dmg", "arch": ["arm64", "x64"] }`.
+
+> The build is also **unsigned** (no Apple Developer ID). The first time you open
+> the packaged app, macOS Gatekeeper will block it — **right-click the app → Open**
+> to run it anyway. For a signed/notarized build, add an Apple Developer
+> certificate and configure code signing in `package.json`.
+
+## Configuration
+
+**You don't need to configure anything.** A `.env` in the project root is loaded
+automatically on launch if present; copy the template to start:
 
 ```bash
-set -a && source .env && set +a && node server.js
+cp .env.example .env
 ```
 
-## About "limits"
+| Variable        | Required? | Purpose                                                              |
+| --------------- | --------- | -------------------------------------------------------------------- |
+| `PORT`          | No        | Port the embedded dashboard server listens on. Default `3000`.       |
+| `HOST`          | No        | Interface the embedded server binds to. Default `127.0.0.1`.         |
+| `CLAUDE_ORG_ID` | No        | Override the auto-detected org UUID for the live-limits card. Not a secret. |
 
-There is **no official API** for Pro/Max subscription rate limits (the 5-hour
-rolling window or weekly caps), so the dashboard can't show your exact remaining
-quota. Instead it replicates the approach used by
-[`ccusage`](https://github.com/ryoppippi/ccusage): it groups your activity into
-5-hour windows that mirror Anthropic's reset cadence and shows how fast you're
-burning through the current one, plus a naive projection to the reset time.
+> ⚠️ **Never commit your real `.env`.** It's `.gitignore`d; only `.env.example`
+> (which contains no secrets) belongs in the repo.
+
+## How the live limits work
+
+There is **no official API** for Pro/Max session/weekly limits, and claude.ai is
+behind Cloudflare. A plain Node request to its usage endpoint gets a `403`
+because Node's TLS/UA fingerprint isn't a real browser's. So the app does what a
+real browser does — because it *is* one:
+
+- An embedded Electron (real Chromium) window logs into claude.ai. You clear
+  Cloudflare by hand once; the clearance cookie is bound to that window.
+- The app then reads `GET /api/organizations/{org}/usage` **from inside that same
+  window**, so the fingerprint and clearance match and the request succeeds.
+- The result is normalized and served to the dashboard UI.
+
+This is **undocumented and unsupported** — the endpoint can change or break
+without notice. Details and the verified response shape are in
+[`SUBSCRIPTION-USAGE-NOTES.md`](SUBSCRIPTION-USAGE-NOTES.md).
+
+The transcript-based **5-hour window / burn-rate** card is separate and always
+available offline. It replicates the approach of
+[`ccusage`](https://github.com/ryoppippi/ccusage): group activity into 5-hour
+windows mirroring Anthropic's reset cadence and project how fast you're burning
+the current one. Costs are computed from public list prices and are
+**estimates**, not a bill.
 
 ## How it works
 
+TypeScript under `src/`, compiled to `dist/` by `npm run build`:
+
 ```
-server.js              zero-dependency HTTP server + static file serving
+src/electron/main.ts   app entry: embedded claude.ai sign-in window, injects the
+                       live-limits transport, then boots the local server + UI
+src/server.ts          local HTTP server (127.0.0.1) + static file serving
   /api/usage           parses + aggregates local transcripts on each request
-  /api/admin           proxies the Admin API (cached 60s); {configured:false} if no key
-lib/parse.js           reads ~/.claude transcripts, dedupes, per-file mtime cache
-lib/pricing.js         list prices per model + cost-per-record (incl. cache rates)
-lib/aggregate.js       totals, by-model/project/day, 5-hour blocks, burn rate, hourly series
-lib/admin.js           Admin Usage & Cost API client
+  /api/limits          live subscription limits from the poll cache
+src/lib/parse.ts       reads ~/.claude transcripts, dedupes, per-file mtime cache
+src/lib/pricing.ts     list prices per model + cost-per-record (incl. cache rates)
+src/lib/aggregate.ts   totals, by-model/project/day, 5-hour blocks, burn rate, hourly series
+src/lib/limits.ts      normalizes claude.ai usage; transport injected by the app
 public/                dashboard UI (vanilla JS + Chart.js from CDN)
 ```
 
-Costs are computed from public list prices and are **estimates**, not a bill.
-Cache writes are priced at 1.25× (5-min) / 2× (1-hour) the input rate and cache
-reads at 0.1×, matching Anthropic's published cache pricing.
-
 ## Privacy & security
 
-Everything runs locally. Your transcripts are read from `~/.claude/projects/`
-on your own machine and never leave it — the dashboard has no telemetry and
-makes no outbound requests except, if you opt in, the Anthropic Admin API call
-to fetch your own org's usage. None of your usage data is committed to the repo.
+Everything runs locally. Your transcripts are read from `~/.claude/projects/` on
+your own machine and never leave it — the app has no telemetry. The only outbound
+requests are to Anthropic, with your own credentials: reads of your own claude.ai
+usage endpoint from the signed-in window. No usage data is committed to the repo.
 
-- **Localhost-only by default.** The server binds to `127.0.0.1`, so it is only
-  reachable from your own machine. There is **no authentication**: if you
-  override `HOST` to `0.0.0.0`, anyone on your network can read your usage data
-  and (if configured) your org's API cost summary. The Admin key itself is never
-  sent to the browser — `/api/admin` proxies the request server-side.
-- **Audit `.claude/settings.local.json` before committing anything like it.**
-  If you use Claude Code in this repo, it writes per-machine permission grants
-  to `.claude/settings.local.json`. That file is deliberately `.gitignore`d
-  here: it accumulates machine-specific paths and any command allowlists you've
-  approved over time. Review it occasionally — broad grants (for example,
-  allowlisting macOS `security` keychain commands) let any future session run
-  those commands without asking — and never force-add it to a public repo.
+- **Localhost-only by default.** The embedded server binds to `127.0.0.1` and has
+  **no authentication**. If you override `HOST` to `0.0.0.0`, anyone on your
+  network can read your usage data.
+- **Audit `.claude/settings.local.json` before committing anything like it.** If
+  you use Claude Code in this repo, it writes per-machine permission grants there.
+  That file is deliberately `.gitignore`d; review it occasionally and never
+  force-add it to a public repo.
 
 ## License
 

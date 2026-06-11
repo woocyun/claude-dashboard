@@ -4,15 +4,35 @@
   "private": true,
   "description": "Realtime dashboard for Claude Code subscription usage (local transcripts) and Anthropic Admin API usage/cost.",
   "type": "commonjs",
-  "bin": { "claude-dashboard": "dist/server.js" },
+  "main": "dist/electron/main.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/server.js",
-    "dev": "tsc && node dist/server.js"
+    "start": "tsc && electron dist/electron/main.js",
+    "pack": "tsc && electron-builder --dir",
+    "dist:mac": "tsc && electron-builder --mac"
   },
-  "engines": { "node": ">=18" },
+  "build": {
+    "appId": "com.local.claude-dashboard",
+    "productName": "Claude Usage Dashboard",
+    "directories": { "output": "release" },
+    "files": [
+      "dist/**/*",
+      "public/**/*",
+      "package.json",
+      "!**/*.map"
+    ],
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.developer-tools"
+    }
+  },
+  "engines": {
+    "node": ">=20.12"
+  },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "electron": "^42.4.0",
+    "electron-builder": "^26.15.2",
     "typescript": "^5.0.0"
   }
 }

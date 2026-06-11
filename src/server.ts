@@ -3,13 +3,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { loadEntries } from './lib/parse';
 import { summarize } from './lib/aggregate';
-import * as admin from './lib/admin';
-import type { AdminData } from './lib/admin';
+import * as limits from './lib/limits';
 
-const PORT = parseInt(process.env.PORT || '4317', 10);
+const PORT = parseInt(process.env.PORT || '3000', 10);
 // Localhost-only by default: the dashboard has no auth and serves usage data.
 const HOST = process.env.HOST || '127.0.0.1';
-const ADMIN_KEY = process.env.ANTHROPIC_ADMIN_KEY || '';
 const PUBLIC = path.join(__dirname, '..', 'public');
 
 const MIME: Record<string, string> = {
@@ -18,10 +16,6 @@ const MIME: Record<string, string> = {
   '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml',
 };
-
-// Cache the Admin API response briefly — the docs recommend polling it at most
-// once per minute, and data is only fresh to ~5 min anyway.
-let adminCache: { at: number; data: AdminData | null } = { at: 0, data: null };
 
 function sendJSON(res: http.ServerResponse, code: number, obj: unknown): void {
   const body = JSON.stringify(obj);
@@ -51,7 +45,7 @@ function serveStatic(res: http.ServerResponse, urlPath: string): void {
   });
 }
 
-const server = http.createServer(async (req, res) => {
+const server = http.createServer((req, res) => {
   const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
 
   if (url.pathname === '/api/usage') {
@@ -64,32 +58,38 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === '/api/admin') {
-    if (!ADMIN_KEY) {
-      sendJSON(res, 200, { configured: false });
-      return;
-    }
-    const now = Date.now();
-    if (adminCache.data && now - adminCache.at < 60_000) {
-      sendJSON(res, 200, adminCache.data);
-      return;
-    }
-    const data = await admin.fetchAll(ADMIN_KEY);
-    adminCache = { at: now, data };
-    sendJSON(res, 200, data);
+  if (url.pathname === '/api/limits') {
+    // Live subscription limits, served from a background-poll cache (the Electron
+    // app feeds the transport via limits.setFetcher).
+    sendJSON(res, 200, limits.current());
     return;
   }
 
   if (url.pathname === '/api/config') {
-    sendJSON(res, 200, { adminConfigured: !!ADMIN_KEY, port: PORT });
+    sendJSON(res, 200, { port: PORT });
     return;
   }
 
   serveStatic(res, url.pathname);
 });
 
-server.listen(PORT, HOST, () => {
-  console.log(`\n  Claude usage dashboard → http://localhost:${PORT}  (bound to ${HOST})\n`);
-  console.log(`  Local subscription data: ~/.claude/projects  (always on)`);
-  console.log(`  Admin API:               ${ADMIN_KEY ? 'configured' : 'not configured (set ANTHROPIC_ADMIN_KEY)'}\n`);
-});
+// Start the limits poller and HTTP server. The Electron main process injects the
+// claude.ai transport (limits.setFetcher) and the org id, then calls this to boot
+// the same server + UI the window loads.
+export function startServer(): http.Server {
+  // Background-poll the live subscription limits (5h session %, weekly %, extra
+  // usage $). Reports { configured:false } until the embedded window is signed in.
+  limits.startPoller(60_000);
+
+  return server.listen(PORT, HOST, () => {
+    console.log(`\n  Claude usage dashboard → http://localhost:${PORT}  (bound to ${HOST})\n`);
+    console.log(`  Local transcript data:   ~/.claude/projects  (always on)`);
+    console.log(`  Subscription limits:     embedded claude.ai window\n`);
+  });
+}
+
+// Fallback when invoked directly (node dist/server.js): serve the transcript
+// panel without live limits. The normal entry point is the Electron app.
+if (require.main === module) {
+  startServer();
+}

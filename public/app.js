@@ -1,7 +1,7 @@
 'use strict';
 
 const POLL_USAGE_MS = 5000;
-const POLL_ADMIN_MS = 60000;
+const POLL_LIMITS_MS = 15000;
 
 const MODEL_COLORS = {
   opus: '#d4a35a',
@@ -182,48 +182,51 @@ function renderTrend(s) {
   });
 }
 
-// ---- admin panel ----
-function renderAdmin(a) {
-  const body = document.getElementById('adminBody');
-  const sub = document.getElementById('adminSub');
-  if (!a || !a.configured) {
-    sub.textContent = 'not configured';
-    body.innerHTML = `<p class="empty">Set <code>ANTHROPIC_ADMIN_KEY</code> (an <code>sk-ant-admin…</code> key from an organization) and restart to see org-level API usage &amp; cost here. Not available for individual Pro/Max accounts.</p>`;
+// ---- subscription limits (live, claude.ai) ----
+function limitColor(pct) {
+  return pct >= 85 ? 'var(--red)' : pct >= 50 ? 'var(--accent)' : 'var(--green)';
+}
+function resetLabel(iso) {
+  if (!iso) return '';
+  const min = (new Date(iso).getTime() - Date.now()) / 60000;
+  return min > 0 ? `resets in ${fmtDuration(min)}` : 'resetting…';
+}
+function gaugeBlock(label, pct, sub) {
+  pct = Math.max(0, Math.min(100, pct || 0));
+  return `<div class="limit">
+    <div class="limit-head"><span class="label">${label}</span><span class="pct">${Math.round(pct)}%</span></div>
+    <div class="gauge-track"><div class="gauge-fill" style="width:${pct}%;background:${limitColor(pct)}"></div></div>
+    <div class="limit-sub">${sub || '&nbsp;'}</div>
+  </div>`;
+}
+function extraBlock(x) {
+  const pct = x.capUsd > 0 ? Math.min(100, (x.usedUsd / x.capUsd) * 100) : 0;
+  return `<div class="limit">
+    <div class="limit-head"><span class="label">Extra usage</span><span class="pct small">${fmtUSD(x.usedUsd)} <small>/ ${fmtUSD(x.capUsd)}</small></span></div>
+    <div class="gauge-track"><div class="gauge-fill" style="width:${pct}%;background:${limitColor(pct)}"></div></div>
+    <div class="limit-sub">${x.enabled ? 'monthly · ' + (x.currency || 'USD') : 'disabled'}</div>
+  </div>`;
+}
+function renderLimits(l) {
+  const body = document.getElementById('limitsBody');
+  const sub = document.getElementById('limitsSub');
+  if (l && l.auth === 'pending') {
+    sub.textContent = 'waiting for sign-in';
+    body.innerHTML = `<div class="auth-pending"><span class="spinner"></span>${l.hint || 'Sign in to Claude in the popup window to load your live limits.'}</div>`;
     return;
   }
-  const usageErr = a.usage && a.usage.error;
-  const costErr = a.cost && a.cost.error;
-  if (usageErr && costErr) {
-    sub.textContent = 'error';
-    body.innerHTML = `<p class="empty">Admin API error: ${usageErr}. ${a.usage.detail && a.usage.detail.error ? a.usage.detail.error.message || '' : ''} (Org admin key required; individual accounts can't use this API.)</p>`;
+  if (!l || !l.configured) {
+    sub.textContent = l && l.error ? 'unavailable' : 'not connected';
+    const hint = (l && l.hint) || 'Sign in to Claude to see live limits.';
+    body.innerHTML = `<p class="empty">${hint}${l && l.error ? `<br><small>${l.error}</small>` : ''}</p>`;
     return;
   }
-  sub.textContent = 'org-level · last 7–30 days';
-  let html = '';
-
-  // Cost report
-  if (a.cost && Array.isArray(a.cost.data)) {
-    let total = 0;
-    const byDesc = {};
-    for (const bucket of a.cost.data) {
-      for (const r of bucket.results || []) {
-        const amt = parseFloat(r.amount || r.cost || 0) / 100; // cents → USD
-        total += amt;
-        const key = (r.description && r.description.model) || r.description || 'API';
-        byDesc[key] = (byDesc[key] || 0) + amt;
-      }
-    }
-    html += `<div class="kpi" style="margin-bottom:14px"><div class="label">API cost (30d)</div><div class="value">${fmtUSD(total)}</div></div>`;
-    const rows = Object.entries(byDesc).sort((x, y) => y[1] - x[1]).slice(0, 6);
-    if (rows.length) {
-      html += '<table><thead><tr><th>Description</th><th>Cost</th></tr></thead><tbody>';
-      for (const [k, v] of rows) html += `<tr><td>${k}</td><td>${fmtUSD(v)}</td></tr>`;
-      html += '</tbody></table>';
-    }
-  } else if (costErr) {
-    html += `<p class="empty">Cost report: ${costErr}</p>`;
-  }
-  body.innerHTML = html || '<p class="empty">No org usage in range.</p>';
+  sub.textContent = 'live · claude.ai' + (l.fetchedAt ? ' · ' + timeAgo(l.fetchedAt) : '');
+  const blocks = [];
+  if (l.session) blocks.push(gaugeBlock('Current session', l.session.pct, resetLabel(l.session.resetsAt)));
+  if (l.weekly) blocks.push(gaugeBlock('Weekly', l.weekly.pct, resetLabel(l.weekly.resetsAt)));
+  if (l.extraUsage) blocks.push(extraBlock(l.extraUsage));
+  body.innerHTML = `<div class="limits-grid">${blocks.join('')}</div>`;
 }
 
 // ---- polling ----
@@ -248,22 +251,22 @@ async function tickUsage() {
   }
 }
 
-async function tickAdmin() {
+async function tickLimits() {
   try {
-    const r = await fetch('/api/admin');
-    renderAdmin(await r.json());
+    const r = await fetch('/api/limits');
+    renderLimits(await r.json());
   } catch (e) {
-    renderAdmin({ configured: true, usage: { error: e.message }, cost: { error: e.message } });
+    renderLimits({ configured: false, error: e.message });
   }
 }
 
-let usageTimer, adminTimer;
+let usageTimer, limitsTimer;
 function start() {
-  tickUsage(); tickAdmin();
+  tickUsage(); tickLimits();
   usageTimer = setInterval(tickUsage, POLL_USAGE_MS);
-  adminTimer = setInterval(tickAdmin, POLL_ADMIN_MS);
+  limitsTimer = setInterval(tickLimits, POLL_LIMITS_MS);
 }
-function stop() { clearInterval(usageTimer); clearInterval(adminTimer); }
+function stop() { clearInterval(usageTimer); clearInterval(limitsTimer); }
 
 document.getElementById('autoToggle').addEventListener('change', (e) => {
   if (e.target.checked) start();
