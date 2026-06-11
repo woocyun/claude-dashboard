@@ -20,12 +20,17 @@ export interface ExtraUsage {
   capUsd: number;
   currency: string;
 }
+export interface CreditBalance {
+  balanceUsd: number;
+  currency: string;
+}
 export interface Limits {
   configured: boolean;
   fetchedAt?: number;
   session?: UsageBucket;
   weekly?: UsageBucket;
   extraUsage?: ExtraUsage;
+  creditBalance?: CreditBalance;
   error?: string;
   hint?: string;
   // Set while the embedded claude.ai window is awaiting sign-in, so the UI can
@@ -33,10 +38,15 @@ export interface Limits {
   auth?: 'pending';
 }
 
-// Transport seam: returns the raw HTTP status + body of the usage endpoint, run
-// from inside the Cloudflare-cleared, logged-in claude.ai window. Injected by
-// the Electron main process via setFetcher().
-export type UsageFetcher = (org: string) => Promise<{ status: number; text: string }>;
+// Transport seam: GET an org-scoped claude.ai API endpoint and return its raw
+// HTTP status + body, run from inside the Cloudflare-cleared, logged-in
+// claude.ai window. `path` is the suffix after /api/organizations/{org}/ (e.g.
+// 'usage', 'prepaid/credits'). Injected by the Electron main process via
+// setFetcher().
+export type UsageFetcher = (
+  org: string,
+  path: string,
+) => Promise<{ status: number; text: string }>;
 
 let activeFetcher: UsageFetcher | null = null;
 export function setFetcher(f: UsageFetcher): void {
@@ -61,6 +71,23 @@ let last: Limits = {
 // secret).
 function resolveOrg(): string | undefined {
   return process.env.CLAUDE_ORG_ID || undefined;
+}
+
+// Parse the /prepaid/credits response into a CreditBalance, or undefined if the
+// fetch failed or the shape is unexpected. The prepaid balance is returned in
+// cents (e.g. 8561 → $85.61), matching the extra_usage convention above.
+function parseCredit(res: { status: number; text: string }): CreditBalance | undefined {
+  if (res.status !== 200) return undefined;
+  try {
+    const c = JSON.parse(res.text);
+    if (c == null || c.amount == null) return undefined;
+    return {
+      balanceUsd: (Number(c.amount) || 0) / 100,
+      currency: c.currency || 'USD',
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 // Poll once, updating the module cache. Always resolves (never throws) so the
@@ -88,7 +115,10 @@ export async function refresh(): Promise<Limits> {
     return last;
   }
   try {
-    const res = await activeFetcher(org);
+    const [res, creditRes] = await Promise.all([
+      activeFetcher(org, 'usage'),
+      activeFetcher(org, 'prepaid/credits'),
+    ]);
 
     if (res.status !== 200) {
       last = {
@@ -121,6 +151,7 @@ export async function refresh(): Promise<Limits> {
             currency: x.currency || 'USD',
           }
         : undefined,
+      creditBalance: parseCredit(creditRes),
     };
     return last;
   } catch (e) {

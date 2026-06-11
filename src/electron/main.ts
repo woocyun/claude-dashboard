@@ -46,12 +46,14 @@ async function pageFetch(
   return win.webContents.executeJavaScript(code, true);
 }
 
-// The injected transport: read usage from the embedded claude.ai window.
-const electronFetcher: limits.UsageFetcher = async (org) => {
+// The injected transport: GET an org-scoped claude.ai API endpoint from inside
+// the embedded, logged-in window. `path` is the suffix after the org segment
+// (e.g. 'usage', 'prepaid/credits').
+const electronFetcher: limits.UsageFetcher = async (org, path) => {
   if (!claudeWin || claudeWin.isDestroyed()) {
     throw new Error('claude.ai window is not available');
   }
-  return pageFetch(claudeWin, `/api/organizations/${org}/usage`);
+  return pageFetch(claudeWin, `/api/organizations/${org}/${path}`);
 };
 
 // Block until claude.ai is logged in (a 200 from /api/organizations carrying an
